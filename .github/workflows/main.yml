@@ -13,24 +13,31 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Auto-Fix Project Structure and Keystore
+      - name: Extract Zip and Prepare Project
         run: |
-          # 1. கோப்புகள் சப்-ஃபோல்டருக்குள் இருந்தால் அவற்றை வெளியே கொண்டு வருதல்
-          if [ ! -f "settings.gradle.kts" ]; then
-            SUBDIR=$(find . -maxdepth 2 -name "settings.gradle.kts" -printf '%h\n' | head -n 1)
-            if [ -n "$SUBDIR" ] && [ "$SUBDIR" != "." ]; then
-              shopt -s dotglob
-              mv "$SUBDIR"/* .
+          # 1. நேராக அப்லோட் செய்யப்பட்ட zip ஃபைலைப் பிரித்தல் (Unzip)
+          ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" | head -n 1)
+          if [ -n "$ZIP_FILE" ]; then
+            echo "Found zip file: $ZIP_FILE. Extracting..."
+            unzip -o -q "$ZIP_FILE" -d extracted_proj
+            shopt -s dotglob
+            # சப்-ஃபோல்டருக்குள் இருந்தால் வெளியே எடுத்தல்
+            SUBDIR=$(find extracted_proj -maxdepth 2 -name "settings.gradle.kts" -printf '%h\n' | head -n 1)
+            if [ -n "$SUBDIR" ]; then
+              cp -rn "$SUBDIR"/* . || cp -r "$SUBDIR"/* .
             fi
+            rm -rf extracted_proj
           fi
-          
-          # 2. விடுபட்ட .env ஃபைலை உருவாக்குதல்
+
+          # 2. app ஃபோல்டர் சரியாக உள்ளதா எனச் சரிபார்த்தல்
+          if [ ! -d "app" ]; then
+            echo "ERROR: 'app' ஃபோல்டர் இல்லை! தயவுசெய்து venkat-ai.zip ஃபைலை அப்படியே GitHub-ல் Upload செய்யவும்."
+            exit 1
+          fi
+
+          # 3. .env ஃபைலை உருவாக்குதல் மற்றும் debugConfig வரியை நீக்குதல்
           cp .env.example .env || touch .env
-          
-          # 3. debug.keystore பிரச்சனையைத் தவிர்க்க அந்த வரியை தானாக நீக்குதல்
-          if [ -f "app/build.gradle.kts" ]; then
-            sed -i '/signingConfigs.getByName("debugConfig")/d' app/build.gradle.kts
-          fi
+          sed -i '/signingConfigs.getByName("debugConfig")/d' app/build.gradle.kts
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
